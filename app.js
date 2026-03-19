@@ -128,7 +128,40 @@ const core = {
             y += 4;
             if (y > 200) { doc.addPage(); y = 25; }
         });
+// --- DESPUÉS DE LOS REGISTROS Y ANTES DEL CITATORIO ---
+        y += 4;
+        
+        // Verificamos si necesitamos otra página para las firmas
+        if (y > 250) { doc.addPage(); y = 25; }
 
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.text("ACUERDOS Y COMPROMISOS DERIVADOS DE ESTA ETAPA:", 20, y);
+        
+        // Dibujamos el cuadro grande para escribir acuerdos a mano o ver los impresos
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.5);
+        doc.rect(20, y + 2, 175, 35); // Cuadro de acuerdos
+        
+        y += 50; // Espacio para las firmas
+
+        // Líneas de firma
+        doc.setLineWidth(0.2);
+        doc.line(25, y, 75, y);   // Firma Docente
+        doc.line(82, y, 132, y);  // Firma Padre
+        doc.line(139, y, 189, y); // Firma Alumno
+
+        doc.setFontSize(8);
+        doc.text("FIRMA DE LA DOCENTE", 50, y + 5, { align: 'center' });
+        doc.text("FIRMA DEL PADRE/TUTOR", 107, y + 5, { align: 'center' });
+        doc.text("FIRMA DEL ALUMNO", 164, y + 5, { align: 'center' });
+
+        // --- SECCIÓN DE CITATORIO RECORTABLE (ESTO YA LO TENÍAS, PERO VA ABAJO) ---
+        doc.setLineDashPattern([2, 2], 0);
+        doc.line(0, 245, 215, 245); 
+        doc.setFontSize(8);
+        doc.text("RECORTAR POR AQUÍ (PARA ACUSE DE RECIBO)", 105, 243, { align: 'center' });
+        // ... (el resto del citatorio oficial que ya pegamos antes)
         // --- CITATORIO ---
         doc.setLineDashPattern([2, 2], 0); doc.line(0, 245, 215, 245); 
         const tieneAntecedentes = historial.some(h => h.archivado);
