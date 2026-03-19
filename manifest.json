@@ -1,0 +1,17 @@
+{
+  "short_name": "DiarioCampo",
+  "name": "Diario de Campo - Mtra. Marlen",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3426/3426653.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#f8fafc",
+  "display": "standalone",
+  "scope": "./",
+  "theme_color": "#1e3a8a"
+}
