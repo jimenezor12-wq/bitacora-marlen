@@ -21,7 +21,7 @@ const core = {
             localStorage.setItem('bitacora_logo', reader.result);
             const preview = document.getElementById('img-logo-preview');
             const placeholder = document.getElementById('placeholder-logo');
-            if(preview) {
+            if (preview) {
                 preview.src = reader.result;
                 preview.classList.remove('hidden');
                 placeholder.classList.add('hidden');
@@ -30,7 +30,7 @@ const core = {
         if (file) reader.readAsDataURL(file);
     },
 
-    guardarConfig() {
+    guardarBorradorConfig() {
         this.data.grupos.forEach(g => {
             const inputNombre = document.getElementById(`name-${g.id}`);
             const listaTxt = document.getElementById(`list-${g.id}`);
@@ -39,50 +39,84 @@ const core = {
                 g.alumnos = listaTxt.value.split('\n').filter(l => l.trim() !== "");
             }
         });
+    },
+
+    agregarGrupo() {
+        this.guardarBorradorConfig();
+        const nuevoId = this.data.grupos.length > 0 
+            ? Math.max(...this.data.grupos.map(g => g.id)) + 1 
+            : 0;
+
+        this.data.grupos.push({
+            id: nuevoId,
+            nombre: `Grupo ${this.data.grupos.length + 1}`,
+            alumnos: [],
+            historial: {}
+        });
+
+        localStorage.setItem('atp_maestro_v3', JSON.stringify(this.data));
+        ui.abrirConfig();
+        ui.renderGrupos();
+    },
+
+    eliminarGrupo(id) {
+        if (!confirm("¿Deseas eliminar este grupo y todos sus expedientes?")) return;
+        this.data.grupos = this.data.grupos.filter(g => g.id !== id);
+        localStorage.setItem('atp_maestro_v3', JSON.stringify(this.data));
+        ui.abrirConfig();
+        ui.renderGrupos();
+    },
+
+    guardarConfig() {
+        this.guardarBorradorConfig();
         localStorage.setItem('atp_maestro_v3', JSON.stringify(this.data));
         ui.renderGrupos();
         ui.cerrarConfig();
     },
 
     registrarIncidencia() {
-        const conducta = document.getElementById('reg-conducta').value;
-        const accion = document.getElementById('reg-accion').value;
-        const acuerdos = document.getElementById('reg-acuerdos').value; 
+        const conducta = document.getElementById('reg-conducta').value.trim();
+        const accion = document.getElementById('reg-accion').value.trim();
+        const acuerdos = document.getElementById('reg-acuerdos').value.trim();
         const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        
-        const grupo = this.data.grupos[this.grupoActual];
-        if (!grupo.historial) grupo.historial = {}; 
+
+        if (!conducta || !accion) {
+            alert("Por favor completa tanto la situación observada como la acción pedagógica.");
+            return;
+        }
+
+        const grupo = this.data.grupos.find(g => g.id === this.grupoActual);
+        if (!grupo) return;
+        if (!grupo.historial) grupo.historial = {};
         if (!grupo.historial[this.alumnoActual]) grupo.historial[this.alumnoActual] = [];
-        
-        let relatoFinal = `El día ${fecha}, el alumno ${conducta} Ante esta situación, ${accion}`;
-        if(acuerdos.trim() !== "") {
+
+        let inicioRelato = conducta.toLowerCase().startsWith('el alumno') ? conducta : `el alumno ${conducta}`;
+        let relatoFinal = `El día ${fecha}, ${inicioRelato}. Ante esta situación, ${accion}`;
+        if (acuerdos !== "") {
             relatoFinal += ` ACUERDOS TRAS REUNIÓN: ${acuerdos}`;
         }
 
-        const nuevaEntrada = {
+        grupo.historial[this.alumnoActual].push({
             fecha: fecha,
             relato: relatoFinal,
             archivado: false
-        };
+        });
 
-        grupo.historial[this.alumnoActual].push(nuevaEntrada);
         localStorage.setItem('atp_maestro_v3', JSON.stringify(this.data));
-        
-        document.getElementById('reg-acuerdos').value = "";
 
         const hits = grupo.historial[this.alumnoActual].filter(h => !h.archivado).length;
-        if(hits >= 4) {
+        if (hits >= 4) {
             alert("🚨 ALERTA: 4 Incidencias alcanzadas. Se recomienda generar el citatorio formal.");
         }
 
         ui.cerrarRegistro();
-        ui.verAlumnos(this.grupoActual); 
+        ui.verAlumnos(this.grupoActual);
     },
 
     generarPDF() {
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ format: 'legal' }); 
-        const g = this.data.grupos[this.grupoActual];
+        const doc = new jsPDF({ format: 'legal' });
+        const g = this.data.grupos.find(gr => gr.id === this.grupoActual);
         const alumno = g.alumnos[this.alumnoActual];
         const historial = g.historial[this.alumnoActual] || [];
         const fechaCita = document.getElementById('pdf-fecha-cita').value;
@@ -90,93 +124,92 @@ const core = {
 
         if (historial.length === 0) return alert("No hay registros para este alumno.");
         if (this.logoData) doc.addImage(this.logoData, 'PNG', 20, 10, 22, 22);
-        
-        doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
         doc.text("REPORTE DE INCIDENCIAS Y SEGUIMIENTO ACADÉMICO", 105, 20, { align: 'center' });
 
-        doc.setDrawColor(180); doc.rect(20, 35, 175, 25); 
-        doc.setFontSize(9); doc.setFont("helvetica", "normal");
+        doc.setDrawColor(180);
+        doc.rect(20, 35, 175, 25);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
         doc.text(`DOCENTE: MARLEN JIMENEZ ORTIZ`, 25, 42);
+        doc.text(`ASIGNATURA: ESPAÑOL`, 25, 48);
         doc.text(`ALUMNO: ${alumno.toUpperCase()}`, 25, 54);
         doc.text(`GRADO Y GRUPO: ${g.nombre}`, 120, 42);
         doc.text(`CICLO ESCOLAR: 2025-2026`, 120, 48);
 
-        doc.setFont("helvetica", "bold"); doc.text("RELATORÍA DE HECHOS Y ACCIONES PEDAGÓGICAS:", 20, 70);
+        doc.setFont("helvetica", "bold");
+        doc.text("RELATORÍA DE HECHOS Y ACCIONES PEDAGÓGICAS:", 20, 70);
         doc.line(20, 72, 195, 72);
 
         let y = 80;
         doc.setFontSize(8.5);
         historial.slice(-4).forEach((h, i) => {
-            doc.setFillColor(248, 248, 248); doc.rect(20, y - 4, 175, 5, 'F');
-            doc.setFont("helvetica", "bold"); doc.text(`REGISTRO #${i+1} - FECHA: ${h.fecha}`, 22, y);
-            y += 6; 
-            
+            doc.setFillColor(248, 248, 248);
+            doc.rect(20, y - 4, 175, 5, 'F');
+            doc.setFont("helvetica", "bold");
+            doc.text(`REGISTRO #${i+1} - FECHA: ${h.fecha}`, 22, y);
+            y += 6;
+
             doc.setFont("helvetica", "normal");
             const partes = h.relato.split(" ACUERDOS TRAS REUNIÓN: ");
             const lines = doc.splitTextToSize(partes[0], 170);
             doc.text(lines, 22, y, { align: 'justify', maxWidth: 170 });
             y += (lines.length * 4.5) + 2;
 
-            if(partes[1]) {
+            if (partes[1]) {
                 doc.setFont("helvetica", "bolditalic");
                 doc.setTextColor(0, 50, 150);
                 const lineasAcuerdo = doc.splitTextToSize(`ACUERDO PREVIO: ${partes[1]}`, 165);
                 doc.text(lineasAcuerdo, 25, y, { maxWidth: 165 });
                 y += (lineasAcuerdo.length * 4) + 2;
-                doc.setTextColor(0, 0, 0); doc.setFont("helvetica", "normal");
+                doc.setTextColor(0, 0, 0);
+                doc.setFont("helvetica", "normal");
             }
             y += 4;
-            if (y > 200) { doc.addPage(); y = 25; }
+            if (y > 185) { doc.addPage(); y = 25; }
         });
-// --- DESPUÉS DE LOS REGISTROS Y ANTES DEL CITATORIO ---
-        y += 4;
-        
-        // Verificamos si necesitamos otra página para las firmas
-        if (y > 250) { doc.addPage(); y = 25; }
 
+        y += 4;
+        if (y > 180) { doc.addPage(); y = 25; }
         doc.setFont("helvetica", "bold");
         doc.setFontSize(10);
         doc.text("ACUERDOS Y COMPROMISOS DERIVADOS DE ESTA ETAPA:", 20, y);
-        
-        // Dibujamos el cuadro grande para escribir acuerdos a mano o ver los impresos
+
         doc.setDrawColor(0);
         doc.setLineWidth(0.5);
-        doc.rect(20, y + 2, 175, 35); // Cuadro de acuerdos
-        
-        y += 50; // Espacio para las firmas
+        doc.rect(20, y + 2, 175, 35);
 
-        // Líneas de firma
+        y += 48;
         doc.setLineWidth(0.2);
-        doc.line(25, y, 75, y);   // Firma Docente
-        doc.line(82, y, 132, y);  // Firma Padre
-        doc.line(139, y, 189, y); // Firma Alumno
-
+        doc.line(25, y, 75, y);
+        doc.line(82, y, 132, y);
+        doc.line(139, y, 189, y);
         doc.setFontSize(8);
         doc.text("FIRMA DE LA DOCENTE", 50, y + 5, { align: 'center' });
         doc.text("FIRMA DEL PADRE/TUTOR", 107, y + 5, { align: 'center' });
         doc.text("FIRMA DEL ALUMNO", 164, y + 5, { align: 'center' });
 
-        // --- SECCIÓN DE CITATORIO RECORTABLE (ESTO YA LO TENÍAS, PERO VA ABAJO) ---
         doc.setLineDashPattern([2, 2], 0);
-        doc.line(0, 245, 215, 245); 
+        doc.line(0, 245, 215, 245);
         doc.setFontSize(8);
         doc.text("RECORTAR POR AQUÍ (PARA ACUSE DE RECIBO)", 105, 243, { align: 'center' });
-        // ... (el resto del citatorio oficial que ya pegamos antes)
-        // --- CITATORIO ---
-        doc.setLineDashPattern([2, 2], 0); doc.line(0, 245, 215, 245); 
+
         const tieneAntecedentes = historial.some(h => h.archivado);
         const tituloCitatorio = tieneAntecedentes ? "CITATORIO (SEGUNDA NOTIFICACIÓN)" : "CITATORIO";
+        doc.setLineDashPattern([], 0);
 
-        doc.setLineDashPattern([], 0); 
-        if (this.logoData) doc.addImage(this.logoData, 'PNG', 20, 250, 18, 18); 
-
-        doc.setFontSize(12); doc.setFont("helvetica", "bold");
-        if(tieneAntecedentes) doc.setTextColor(200, 0, 0);
+        if (this.logoData) doc.addImage(this.logoData, 'PNG', 20, 250, 18, 18);
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        if (tieneAntecedentes) doc.setTextColor(200, 0, 0);
         doc.text(tituloCitatorio, 105, 260, { align: 'center' });
         doc.setTextColor(0, 0, 0);
 
-        doc.setFontSize(10); doc.setFont("helvetica", "normal");
-        let cuerpoMsj = tieneAntecedentes 
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        let cuerpoMsj = tieneAntecedentes
             ? `Por medio de la presente, se le comunica que debido a la REINCIDENCIA en las conductas detectadas y al seguimiento previo de acuerdos, se requiere su presencia de carácter URGENTE para tratar el desempeño de su hijo(a) ${alumno.toUpperCase()}.`
             : `Por medio de la presente, se solicita su presencia de manera formal para tratar asuntos relacionados con el desempeño académico de su hijo(a) ${alumno.toUpperCase()}.`;
 
@@ -184,7 +217,8 @@ const core = {
         doc.text(doc.splitTextToSize(cuerpoMsj, 175), 20, 282, { align: 'justify', maxWidth: 175 });
         doc.setFont("helvetica", "bold");
         doc.text(`Día: ${fechaCita} | Hora: ${horaCita} hrs.`, 20, 298);
-        doc.setFontSize(9); doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
         doc.text("Agradezco su puntual asistencia y corresponsabilidad educativa.", 20, 308);
         doc.text("Mtra. Marlen Jimenez Ortiz - Asignatura de Español", 20, 325);
 
@@ -193,45 +227,76 @@ const core = {
 
     generarPDFInasistencia() {
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ format: 'letter' }); 
-        const g = this.data.grupos[this.grupoActual];
+        const doc = new jsPDF({ format: 'letter' });
+        const g = this.data.grupos.find(gr => gr.id === this.grupoActual);
         const alumno = g.alumnos[this.alumnoActual];
         const historial = g.historial[this.alumnoActual] || [];
         const fechaCita = document.getElementById('pdf-fecha-cita').value;
         const horaCita = document.getElementById('pdf-hora-cita').value;
 
         const tieneAntecedentes = historial.some(h => h.archivado);
-        const tituloDoc = tieneAntecedentes 
-            ? "CONSTANCIA DE INASISTENCIA REINCIDENTE DEL TUTOR" 
+        const tituloDoc = tieneAntecedentes
+            ? "CONSTANCIA DE INASISTENCIA REINCIDENTE DEL TUTOR"
             : "CONSTANCIA DE INASISTENCIA DE PADRE DE FAMILIA / TUTOR";
 
         if (this.logoData) doc.addImage(this.logoData, 'PNG', 20, 10, 20, 20);
-        doc.setFont("helvetica", "bold"); doc.setFontSize(12);
-        if(tieneAntecedentes) doc.setTextColor(180, 0, 0);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        if (tieneAntecedentes) doc.setTextColor(180, 0, 0);
         doc.text(tituloDoc, 105, 20, { align: 'center' });
         doc.setTextColor(0, 0, 0);
 
-        doc.setDrawColor(180); doc.rect(20, 32, 175, 22); 
-        doc.setFontSize(8.5); doc.setFont("helvetica", "normal");
-        doc.text(`DOCENTE: MARLEN JIMENEZ ORTIZ`, 25, 38);
+        doc.setDrawColor(180);
+        doc.rect(20, 32, 175, 22);
+        doc.setFontSize(8.5);
+        doc.setFont("helvetica", "normal");
+        doc.text(`DOCENTE: MTRA. MARLEN JIMENEZ ORTIZ`, 25, 38);
         doc.text(`ALUMNO: ${alumno.toUpperCase()}`, 25, 48);
         doc.text(`GRADO Y GRUPO: ${g.nombre}`, 120, 38);
+        doc.text(`FECHA DE REPORTE: ${new Date().toLocaleDateString()}`, 120, 43);
 
-        doc.setFont("helvetica", "bold"); doc.text("HECHOS:", 20, 62);
-        const intro = `Se hace constar que el día ${fechaCita} a las ${horaCita} hrs, el tutor de ${alumno.toUpperCase()} NO ASISTIÓ a la cita programada para establecer acuerdos de mejora académica.`;
-        doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text("HECHOS:", 20, 62);
+        doc.line(20, 64, 195, 64);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        const intro = `Se hace constar que el día ${fechaCita} a las ${horaCita} hrs, el padre de familia o tutor del alumno(a) ${alumno.toUpperCase()} NO ASISTIÓ a la cita programada para el establecimiento de compromisos y seguimiento académico bajo el Marco de Convivencia Escolar.`;
         doc.text(doc.splitTextToSize(intro, 175), 20, 72, { align: 'justify', maxWidth: 175 });
 
         let y = 88;
-        doc.setFont("helvetica", "bold"); doc.text("ANTECEDENTES ACUMULADOS:", 20, y); y += 6;
+        doc.setFont("helvetica", "bold");
+        doc.text("ANTECEDENTES ACUMULADOS:", 20, y);
+        y += 6;
+
         doc.setFontSize(8);
         historial.slice(-5).forEach((h, i) => {
-            doc.setFillColor(248, 248, 248); doc.rect(20, y - 4, 175, 5, 'F');
-            doc.text(`REGISTRO #${i+1} - FECHA: ${h.fecha} ${h.archivado ? '(CICLO ANTERIOR)' : ''}`, 22, y); y += 6;
+            doc.setFillColor(248, 248, 248);
+            doc.rect(20, y - 4, 175, 5, 'F');
+            doc.setFont("helvetica", "bold");
+            doc.text(`REGISTRO #${i+1} - FECHA: ${h.fecha} ${h.archivado ? '(CICLO ANTERIOR)' : ''}`, 22, y);
+            y += 6;
+            doc.setFont("helvetica", "normal");
             const lines = doc.splitTextToSize(h.relato, 170);
             doc.text(lines, 22, y, { align: 'justify', maxWidth: 170 });
             y += (lines.length * 4) + 6;
         });
+
+        y += 6;
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        const conclusion = `Sin embargo, se informa que el interesado NO ASISTIÓ a la cita ni presentó justificación alguna, imposibilitando la firma de compromisos mutuos. Este documento se anexa al expediente del alumno como evidencia de la intervención docente y la falta de corresponsabilidad del tutor ante las situaciones arriba descritas.`;
+        const linesConcl = doc.splitTextToSize(conclusion, 175);
+        if (y + 35 > 230) { doc.addPage(); y = 25; }
+        doc.text(linesConcl, 20, y, { align: 'justify', maxWidth: 175 });
+
+        const yFirma = 250;
+        doc.setFontSize(10);
+        doc.line(70, yFirma, 140, yFirma);
+        doc.text("Mtra. Marlen Jimenez Ortiz", 105, yFirma + 5, { align: 'center' });
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.text("Firma de la Docente", 105, yFirma + 10, { align: 'center' });
 
         doc.save(`Inasistencia_${alumno.replace(/\s+/g, '_')}.pdf`);
     }
@@ -241,25 +306,27 @@ const core = {
 const ui = {
     renderGrupos() {
         const grid = document.getElementById('view-groups');
-        if(!grid) return;
+        if (!grid) return;
         grid.innerHTML = core.data.grupos.map(g => `
-            <button onclick="ui.verAlumnos(${g.id})" class="glass-card p-6 rounded-3xl text-left border-b-4 border-blue-600 transition-all active:scale-95">
+            <button onclick="ui.verAlumnos(${g.id})" class="glass-card p-6 rounded-3xl text-left border-b-4 border-blue-600 transition-all active:scale-95 bg-white shadow-sm hover:shadow-md">
                 <span class="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Español</span>
                 <span class="text-2xl font-black text-gray-800">${g.nombre || 'Sin Nombre'}</span>
-                <p class="mt-2 text-xs font-bold text-gray-400">${g.alumnos.length} Alumnos</p>
+                <p class="mt-2 text-xs font-bold text-gray-400">${g.alumnos ? g.alumnos.length : 0} Alumnos</p>
             </button>
         `).join('');
     },
 
     verAlumnos(id) {
         core.grupoActual = id;
-        const g = core.data.grupos[id];
+        const g = core.data.grupos.find(gr => gr.id === id);
+        if (!g) return;
+
         document.getElementById('view-groups').classList.add('hidden');
         document.getElementById('view-students').classList.remove('hidden');
         document.getElementById('current-group-title').innerText = g.nombre;
-        
+
         const lista = document.getElementById('students-list');
-        lista.innerHTML = g.alumnos.map((a, i) => {
+        lista.innerHTML = (g.alumnos || []).map((a, i) => {
             const hits = g.historial && g.historial[i] ? g.historial[i].filter(h => !h.archivado).length : 0;
             const colorHits = hits >= 4 ? 'bg-red-500 shadow-lg shadow-red-200' : (hits > 0 ? 'bg-blue-500' : 'bg-gray-200');
             return `
@@ -269,10 +336,10 @@ const ui = {
                         <span class="font-bold text-gray-700 text-sm">${a}</span>
                     </div>
                     <div class="flex gap-2">
-                        <button onclick="ui.abrirHistorial(${i}, '${a}')" class="bg-blue-50 text-blue-600 p-2 rounded-xl">
+                        <button onclick="ui.abrirHistorial(${i}, '${a.replace(/'/g, "\\'")}')" class="bg-blue-50 text-blue-600 p-2 rounded-xl hover:bg-blue-100 transition-colors">
                             <i class="fas fa-eye"></i>
                         </button>
-                        <button onclick="ui.abrirRegistro(${i}, '${a}')" class="bg-gray-900 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase">
+                        <button onclick="ui.abrirRegistro(${i}, '${a.replace(/'/g, "\\'")}')" class="bg-gray-900 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-black transition-colors">
                             Registrar
                         </button>
                     </div>
@@ -287,58 +354,74 @@ const ui = {
     },
 
     abrirConfig() {
-        // 1. Renderizamos los grupos en el editor
         const editor = document.getElementById('editor-grupos');
         if (editor) {
             editor.innerHTML = core.data.grupos.map(g => `
-                <div class="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                    <input id="name-${g.id}" value="${g.nombre}" class="w-full mb-3 p-3 rounded-xl border-none font-black text-blue-900" placeholder="Grado/Grupo">
-                    <textarea id="list-${g.id}" class="w-full h-24 p-4 rounded-xl border-none text-xs font-medium" placeholder="Pega la lista aquí...">${g.alumnos.join('\n')}</textarea>
+                <div class="bg-gray-50 p-4 rounded-2xl border border-gray-200 relative mb-3">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-[10px] font-black text-blue-500 uppercase tracking-widest">Grupo ID: ${g.id}</span>
+                        <button onclick="core.eliminarGrupo(${g.id})" class="text-red-400 hover:text-red-600 text-xs font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">
+                            <i class="fas fa-trash-alt mr-1"></i> Eliminar
+                        </button>
+                    </div>
+                    <input id="name-${g.id}" value="${g.nombre}" class="w-full mb-3 p-3 rounded-xl border-none font-black text-blue-900 bg-white ring-1 ring-gray-200 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Nombre (Ej. 1º C)">
+                    <textarea id="list-${g.id}" class="w-full h-24 p-4 rounded-xl border-none text-xs font-medium bg-white ring-1 ring-gray-200 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Pega los alumnos aquí (uno por renglón)...">${(g.alumnos || []).join('\n')}</textarea>
                 </div>
             `).join('');
         }
 
-        // 2. Cargamos la vista previa del logo si ya existe en memoria
         const preview = document.getElementById('img-logo-preview');
         const placeholder = document.getElementById('placeholder-logo');
-        
         if (core.logoData && preview && placeholder) {
             preview.src = core.logoData;
             preview.classList.remove('hidden');
             placeholder.classList.add('hidden');
         } else if (preview && placeholder) {
-            // Si no hay logo, nos aseguramos de mostrar el icono vacío
             preview.classList.add('hidden');
             placeholder.classList.remove('hidden');
         }
 
-        // 3. Mostramos el modal
         const modal = document.getElementById('modal-config');
         if (modal) modal.classList.remove('hidden');
     },
 
-    cerrarConfig() { 
+    cerrarConfig() {
         const modal = document.getElementById('modal-config');
-        if (modal) modal.classList.add('hidden'); 
+        if (modal) modal.classList.add('hidden');
     },
 
     abrirRegistro(idx, nombre) {
         core.alumnoActual = idx;
         document.getElementById('encabezado-alumno').innerHTML = `<h4 class="text-blue-600 font-black">${nombre}</h4>`;
+        document.getElementById('reg-conducta').value = "";
+        document.getElementById('reg-accion').value = "";
+        document.getElementById('reg-acuerdos').value = "";
         document.getElementById('modal-registro').classList.remove('hidden');
     },
 
-    cerrarRegistro() { document.getElementById('modal-registro').classList.add('hidden'); },
+    cargarPlantilla(tipo, valor) {
+        if (!valor) return;
+        const campo = tipo === 'conducta' ? document.getElementById('reg-conducta') : document.getElementById('reg-accion');
+        if (campo) {
+            campo.value = valor;
+            campo.focus();
+        }
+    },
+
+    cerrarRegistro() {
+        document.getElementById('modal-registro').classList.add('hidden');
+    },
 
     abrirHistorial(idx, nombre) {
         core.alumnoActual = idx;
         document.getElementById('hist-alumno-nombre').innerText = nombre;
-        const g = core.data.grupos[core.grupoActual];
-        const historial = g.historial ? (g.historial[idx] || []) : [];
-        const registrosActivos = historial.filter(h => !h.archivado).length;
+        const g = core.data.grupos.find(gr => gr.id === core.grupoActual);
+        const historial = g && g.historial ? (g.historial[idx] || []) : [];
+        const hoy = new Date().toISOString().split('T')[0];
+        document.getElementById('pdf-fecha-cita').value = hoy;
 
         const container = document.getElementById('lista-registros');
-        container.innerHTML = historial.length > 0 ? 
+        container.innerHTML = historial.length > 0 ?
             historial.map((h, i) => {
                 const partes = h.relato.split(" ACUERDOS TRAS REUNIÓN: ");
                 return `
@@ -349,7 +432,7 @@ const ui = {
                         <p class="text-xs text-gray-700 leading-relaxed">${partes[0]}</p>
                         ${partes[1] ? `
                             <div class="mt-2 p-2 bg-white/50 rounded-lg border border-blue-100">
-                                <p class="text-[10px] font-black text-blue-600 uppercase mb-1">🤝 Acuerdos pactados:</p>
+                                <p class="text-[10px] font-black text-blue-600 uppercase mb-1">Acuerdos pactados:</p>
                                 <p class="text-xs text-blue-800 italic">"${partes[1]}"</p>
                             </div>
                         ` : ''}
@@ -357,6 +440,7 @@ const ui = {
                 `;
             }).join('') : '<p class="text-center text-gray-400 py-4 italic text-sm">Sin registros previos.</p>';
 
+        const registrosActivos = historial.filter(h => !h.archivado).length;
         if (registrosActivos > 0) {
             container.innerHTML += `
                 <button onclick="ui.confirmarReinicio()" class="mt-4 w-full bg-emerald-50 text-emerald-600 py-3 rounded-xl font-black text-[10px] uppercase border border-emerald-100 hover:bg-emerald-100 transition">
@@ -364,23 +448,29 @@ const ui = {
                 </button>
             `;
         }
+
         document.getElementById('modal-historial').classList.remove('hidden');
     },
 
     confirmarReinicio() {
-        if(confirm("¿Deseas cerrar este ciclo? El contador volverá a cero pero el historial se mantiene.")) {
-            const g = core.data.grupos[core.grupoActual];
+        if (confirm("¿Deseas cerrar este ciclo? El contador volverá a cero pero el historial se mantiene.")) {
+            const g = core.data.grupos.find(gr => gr.id === core.grupoActual);
             g.historial[core.alumnoActual].forEach(h => h.archivado = true);
             localStorage.setItem('atp_maestro_v3', JSON.stringify(core.data));
-            ui.cerrarHistorial(); ui.verAlumnos(core.grupoActual);
+            ui.cerrarHistorial();
+            ui.verAlumnos(core.grupoActual);
         }
     },
 
-    cerrarHistorial() { document.getElementById('modal-historial').classList.add('hidden'); },
+    cerrarHistorial() {
+        document.getElementById('modal-historial').classList.add('hidden');
+    },
 
     toggleGuiaGeneral() {
         const guia = document.getElementById('guia-rapida');
-        if(guia) guia.classList.toggle('hidden');
+        if (guia) {
+            guia.classList.toggle('hidden');
+        }
     }
 };
 
@@ -388,5 +478,7 @@ const ui = {
 document.addEventListener('DOMContentLoaded', () => {
     ui.renderGrupos();
     const inputLogo = document.getElementById('input-logo');
-    if(inputLogo) inputLogo.addEventListener('change', (e) => core.manejarLogo(e));
+    if (inputLogo) {
+        inputLogo.addEventListener('change', (e) => core.manejarLogo(e));
+    }
 });
